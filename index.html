@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSSP Algorithm Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
+        }
+        .info-box {
+            background-color: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Set a minimum height for the visualization cards, especially on mobile */
+        .viz-card {
+            min-height: 45vh; /* Use viewport height to ensure space */
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="w-full max-w-7xl mx-auto p-2 sm:p-4 flex flex-col">
+        <!-- Header -->
+        <div class="flex-shrink-0 text-center mb-2">
+            <!-- CHANGED: Title updated -->
+            <h1 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900">BMSSP vs Dijkstra's</h1>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex-shrink-0 bg-white rounded-xl shadow-md p-2 sm:p-4 mb-2 flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-sm">
+            <div class="flex items-center gap-2">
+                <label for="graphType" class="font-medium text-gray-700">Graph:</label>
+                <select id="graphType" class="rounded-lg border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    <option value="bottleneck">Bottleneck</option>
+                    <option value="grid">Grid</option>
+                    <option value="barbell">Barbell</option>
+                    <option value="caveman" selected>Caveman</option>
+                    <option value="hubAndSpoke">Hub & Spoke</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <label for="speed" class="font-medium text-gray-700">Speed:</label>
+                <input type="range" id="speed" min="1" max="10" value="5" class="w-24">
+            </div>
+            <button id="startBtn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">Start</button>
+        </div>
+        
+        <div class="flex-shrink-0 text-center mb-2 text-xs text-gray-500">
+            <p><span class="font-bold text-green-600">Green:</span> Completed | <span class="font-bold text-yellow-500">Yellow:</span> Frontier/Queue | <span class="font-bold text-blue-600">Blue:</span> Pivot | <span class="font-bold text-purple-500">Purple:</span> Touched (W) | <span class="font-bold text-pink-500">Pink:</span> Sub-frontier (Si)</p>
+        </div>
+
+        <!-- Visualizations Container -->
+        <div id="vizContainer" class="flex-grow flex flex-col md:flex-row gap-4">
+            
+            <!-- BMSSP Algorithm -->
+            <div class="viz-card flex-1 bg-white rounded-xl shadow-lg p-2 flex flex-col">
+                <h2 class="text-base sm:text-lg font-bold text-center flex-shrink-0">Bounded Multi-Source Shortest Path (BMSSP)</h2>
+                <div class="relative flex-grow">
+                     <canvas id="newAlgoCanvas" class="absolute top-0 left-0"></canvas>
+                     <div id="newAlgoInfo" class="info-box absolute top-2 right-2 z-10 p-2 rounded-lg text-xs shadow text-left"></div>
+                </div>
+            </div>
+
+            <!-- Dijkstra's Algorithm -->
+            <div class="viz-card flex-1 bg-white rounded-xl shadow-lg p-2 flex flex-col">
+                <h2 class="text-base sm:text-lg font-bold text-center flex-shrink-0">Dijkstra's Algorithm</h2>
+                <div class="relative flex-grow">
+                    <canvas id="dijkstraCanvas" class="absolute top-0 left-0"></canvas>
+                    <div id="dijkstraInfo" class="info-box absolute top-2 right-2 z-10 p-2 rounded-lg text-xs shadow text-left"></div>
+                </div>
+            </div>
+
+        </div>
+        
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const dijkstraCanvas = document.getElementById('dijkstraCanvas');
+        const newAlgoCanvas = document.getElementById('newAlgoCanvas');
+        const startBtn = document.getElementById('startBtn');
+        const graphTypeSelect = document.getElementById('graphType');
+        const speedInput = document.getElementById('speed');
+
+        // --- Global State ---
+        const dpr = window.devicePixelRatio || 1;
+        let dijkstraCtx, newAlgoCtx;
+        const NODE_COUNT = 75;
+        let graph = { nodes: [], edges: [] };
+        let dijkstraState, newAlgoState;
+        let animationFrameId;
+        let isRunning = false, lastTime = 0, speed = 5;
+
+        // --- Canvas Setup ---
+        function scaleCanvas(canvas, ctx) {
+            const container = canvas.parentElement;
+            if (!container) return;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+                canvas.width = width * dpr;
+                canvas.height = height * dpr;
+                ctx.scale(dpr, dpr);
+            }
+        }
+
+        // --- Graph Generation ---
+        function createGraph(type) {
+            graph = { nodes: [], edges: [] };
+            const canvasWidth = newAlgoCanvas.clientWidth;
+            const canvasHeight = newAlgoCanvas.clientHeight;
+            const padding = 20;
+
+            if (canvasWidth === 0 || canvasHeight === 0) return; // Don't generate if canvas isn't visible
+
+            for (let i = 0; i < NODE_COUNT; i++) {
+                graph.nodes.push({ id: i, x: 0, y: 0, adj: [] });
+            }
+            
+            graph.nodes[0].x = padding;
+            graph.nodes[0].y = canvasHeight / 2;
+
+            if (type === 'grid') {
+                const grid_cols = Math.ceil(Math.sqrt(NODE_COUNT * (canvasWidth/canvasHeight)));
+                const grid_rows = Math.ceil(NODE_COUNT / grid_cols);
+                for (let i = 0; i < NODE_COUNT; i++) {
+                    const r = Math.floor(i / grid_cols);
+                    const c = i % grid_cols;
+                    if (r >= grid_rows) continue;
+                    graph.nodes[i].x = padding + c * (canvasWidth - 2 * padding) / (grid_cols - 1);
+                    graph.nodes[i].y = padding + r * (canvasHeight - 2 * padding) / (grid_rows - 1);
+                }
+                 for (let i = 0; i < NODE_COUNT; i++) {
+                    const r = Math.floor(i / grid_cols);
+                    const c = i % grid_cols;
+                    if (r >= grid_rows) continue;
+                    if (c < grid_cols - 1 && (i+1 < NODE_COUNT)) addEdge(i, i + 1);
+                    if (r < grid_rows - 1 && (i+grid_cols < NODE_COUNT)) addEdge(i, i + grid_cols);
+                 }
+            } else if (type === 'bottleneck') {
+                 const bottleneckNode = 1;
+                graph.nodes[bottleneckNode].x = canvasWidth / 2;
+                graph.nodes[bottleneckNode].y = canvasHeight / 2;
+                addEdge(0, bottleneckNode, 5);
+                for(let i = 2; i < NODE_COUNT; i++) {
+                    graph.nodes[i].x = padding + Math.random() * (canvasWidth - 2 * padding);
+                    graph.nodes[i].y = padding + Math.random() * (canvasHeight - 2 * padding);
+                    if (Math.random() > 0.5) {
+                        addEdge(bottleneckNode, i, 10 + Math.random() * 20);
+                    } else {
+                        const otherNode = Math.floor(2 + Math.random() * (NODE_COUNT-2));
+                        if(i !== otherNode) addEdge(i, otherNode, 1 + Math.random() * 5);
+                    }
+                }
+            } else if (type === 'barbell') {
+                const half = Math.floor(NODE_COUNT / 2);
+                for (let i = 1; i < half; i++) {
+                    graph.nodes[i].x = canvasWidth * 0.25 + (Math.random() - 0.5) * canvasWidth * 0.2;
+                    graph.nodes[i].y = canvasHeight / 2 + (Math.random() - 0.5) * canvasHeight * 0.8;
+                }
+                for (let i = 0; i < half; i++) {
+                    for (let j = i + 1; j < half; j++) {
+                        if(Math.random() > 0.5) addEdge(i, j);
+                    }
+                }
+                for (let i = half; i < NODE_COUNT; i++) {
+                    graph.nodes[i].x = canvasWidth * 0.75 + (Math.random() - 0.5) * canvasWidth * 0.2;
+                    graph.nodes[i].y = canvasHeight / 2 + (Math.random() - 0.5) * canvasHeight * 0.8;
+                }
+                for (let i = half; i < NODE_COUNT; i++) {
+                    for (let j = i + 1; j < NODE_COUNT; j++) {
+                        if(Math.random() > 0.5) addEdge(i, j);
+                    }
+                }
+                addEdge(1, half);
+            } else if (type === 'caveman') {
+                const numCaves = 5;
+                const nodesPerCave = Math.floor(NODE_COUNT / numCaves);
+                const caveGuards = [];
+                for (let c = 0; c < numCaves; c++) {
+                    const centerX = canvasWidth / 2 + (canvasWidth * 0.4) * Math.cos(c * 2 * Math.PI / numCaves);
+                    const centerY = canvasHeight / 2 + (canvasHeight * 0.4) * Math.sin(c * 2 * Math.PI / numCaves);
+                    const startNode = c * nodesPerCave;
+                    const endNode = Math.min((c + 1) * nodesPerCave, NODE_COUNT);
+                    caveGuards.push(startNode);
+
+                    for (let i = startNode; i < endNode; i++) {
+                        graph.nodes[i].x = centerX + (Math.random() - 0.5) * canvasWidth * 0.15;
+                        graph.nodes[i].y = centerY + (Math.random() - 0.5) * canvasHeight * 0.15;
+                        for (let j = i + 1; j < endNode; j++) {
+                            addEdge(i, j);
+                        }
+                    }
+                }
+                for (let i = 0; i < caveGuards.length; i++) {
+                    addEdge(caveGuards[i], caveGuards[(i + 1) % caveGuards.length]);
+                }
+            } else if (type === 'hubAndSpoke') {
+                const hubNode = 1;
+                graph.nodes[hubNode].x = canvasWidth / 2;
+                graph.nodes[hubNode].y = canvasHeight / 2;
+                addEdge(0, hubNode);
+
+                const numSpokes = NODE_COUNT - 2;
+                for (let i = 0; i < numSpokes; i++) {
+                    const angle = i * 2 * Math.PI / numSpokes;
+                    const radius = Math.min(canvasWidth, canvasHeight) * 0.4;
+                    const nodeIdx = i + 2;
+                    graph.nodes[nodeIdx].x = canvasWidth / 2 + radius * Math.cos(angle);
+                    graph.nodes[nodeIdx].y = canvasHeight / 2 + radius * Math.sin(angle);
+                    addEdge(hubNode, nodeIdx);
+                    if (i > 0) addEdge(nodeIdx, nodeIdx - 1);
+                }
+                 if(numSpokes > 1) addEdge(2, numSpokes + 1);
+            }
+
+            graph.nodes.forEach(node => {
+                node.adj = graph.edges.filter(e => e.source === node.id);
+            });
+        }
+
+        function addEdge(u, v, weight = null) {
+            const dist = weight === null ? Math.hypot(graph.nodes[u].x - graph.nodes[v].x, graph.nodes[u].y - graph.nodes[v].y) : weight;
+            graph.edges.push({ source: u, target: v, weight: dist });
+            graph.edges.push({ source: v, target: u, weight: dist });
+        }
+
+        // --- Priority Queue ---
+        class PriorityQueue {
+            constructor() { this.elements = []; }
+            enqueue(element, priority) { this.elements.push({ element, priority }); this.sort(); }
+            dequeue() { return this.elements.shift().element; }
+            isEmpty() { return this.elements.length === 0; }
+            sort() { this.elements.sort((a, b) => a.priority - b.priority); }
+            size() { return this.elements.length; }
+            pull(count) {
+                const pulled = this.elements.splice(0, count);
+                const nextBound = this.isEmpty() ? Infinity : this.elements[0].priority;
+                return { nodes: pulled.map(p => p.element), bound: nextBound };
+            }
+        }
+
+        // --- Algorithm Logic ---
+        function resetAlgorithms() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            const initDistances = new Array(NODE_COUNT).fill(Infinity);
+            const initCompleted = new Array(NODE_COUNT).fill(false);
+            initDistances[0] = 0;
+            dijkstraState = { distances: [...initDistances], completed: [...initCompleted], pq: new PriorityQueue(), completedCount: 0, isDone: false };
+            dijkstraState.pq.enqueue(0, 0);
+            newAlgoState = { distances: [...initDistances], completed: [...initCompleted], phase: 'START_ROUND', S: new Set(), P: new Set(), W: new Set(), D: new PriorityQueue(), Si: new Set(), Ui: new Set(), findPivotsStep: 0, completedCount: 1, isDone: false };
+            newAlgoState.completed[0] = true;
+        }
+
+        function stepDijkstra() { 
+            if (dijkstraState.pq.isEmpty() || dijkstraState.isDone) {
+                dijkstraState.isDone = true; return;
+            }
+            const u = dijkstraState.pq.dequeue();
+            if (dijkstraState.completed[u]) return;
+            dijkstraState.completed[u] = true;
+            dijkstraState.completedCount++;
+            
+            graph.nodes[u].adj.forEach(edge => {
+                const v = edge.target;
+                const newDist = dijkstraState.distances[u] + edge.weight;
+                if (newDist < dijkstraState.distances[v]) {
+                    dijkstraState.distances[v] = newDist;
+                    dijkstraState.pq.enqueue(v, newDist);
+                }
+            });
+        }
+        const K_STEPS = 4, PIVOT_THRESHOLD = 4, SUB_FRONTIER_SIZE = 8;
+        function stepNewAlgo() {
+            if (newAlgoState.isDone) return;
+
+            if (newAlgoState.phase === 'START_ROUND') {
+                if (newAlgoState.completedCount >= NODE_COUNT) { newAlgoState.isDone = true; return; }
+                const newS = new Set();
+                for (let i = 0; i < NODE_COUNT; i++) {
+                    if (newAlgoState.completed[i]) {
+                        graph.nodes[i].adj.forEach(edge => {
+                            if (!newAlgoState.completed[edge.target]) newS.add(edge.target);
+                        });
+                    }
+                }
+                newAlgoState.S = newS;
+                if (newAlgoState.S.size === 0) { newAlgoState.isDone = true; return; }
+                newAlgoState.findPivotsStep = 0;
+                newAlgoState.W = new Set(newAlgoState.S);
+                newAlgoState.phase = 'FIND_PIVOTS';
+            } else if (newAlgoState.phase === 'FIND_PIVOTS') {
+                if (newAlgoState.findPivotsStep >= K_STEPS) {
+                    const subtrees = {};
+                    newAlgoState.S.forEach(p => subtrees[p] = 0);
+                    newAlgoState.W.forEach(w_node => {
+                        let bestParent = -1, bestDist = Infinity;
+                        newAlgoState.S.forEach(s_node => {
+                           if (newAlgoState.distances[w_node] >= newAlgoState.distances[s_node] && newAlgoState.distances[s_node] < bestDist) {
+                               bestDist = newAlgoState.distances[s_node]; bestParent = s_node;
+                           }
+                        });
+                        if (bestParent !== -1) subtrees[bestParent]++;
+                    });
+                    newAlgoState.P = new Set();
+                    Object.keys(subtrees).forEach(p => {
+                        if (subtrees[p] >= PIVOT_THRESHOLD) newAlgoState.P.add(parseInt(p));
+                    });
+                    if (newAlgoState.P.size === 0) newAlgoState.P = new Set(newAlgoState.S);
+                    newAlgoState.D = new PriorityQueue();
+                    newAlgoState.P.forEach(p => newAlgoState.D.enqueue(p, newAlgoState.distances[p]));
+                    newAlgoState.phase = 'PROCESS_SUBPROBLEMS';
+                    return;
+                }
+                const currentQueue = (newAlgoState.findPivotsStep === 0) ? newAlgoState.S : newAlgoState.W;
+                const nextW = new Set(newAlgoState.W);
+                currentQueue.forEach(u => {
+                    graph.nodes[u].adj.forEach(edge => {
+                        const v = edge.target;
+                        if (newAlgoState.completed[v]) return;
+                        const newDist = newAlgoState.distances[u] + edge.weight;
+                        if (newDist < newAlgoState.distances[v]) {
+                            newAlgoState.distances[v] = newDist; nextW.add(v);
+                        }
+                    });
+                });
+                newAlgoState.W = nextW;
+                newAlgoState.findPivotsStep++;
+            } else if (newAlgoState.phase === 'PROCESS_SUBPROBLEMS') {
+                if (newAlgoState.D.isEmpty()) {
+                    newAlgoState.W.forEach(w_node => {
+                        if (!newAlgoState.completed[w_node]) {
+                            newAlgoState.completed[w_node] = true; newAlgoState.completedCount++;
+                        }
+                    });
+                    newAlgoState.phase = 'START_ROUND'; return;
+                }
+                const { nodes, bound } = newAlgoState.D.pull(SUB_FRONTIER_SIZE);
+                newAlgoState.Si = new Set(nodes);
+                newAlgoState.Ui = new Set();
+                const q = [...newAlgoState.Si], visited = new Set(q);
+                while (q.length > 0) {
+                    const u = q.shift();
+                    newAlgoState.Ui.add(u);
+                    graph.nodes[u].adj.forEach(edge => {
+                        const v = edge.target;
+                        if (!visited.has(v) && newAlgoState.distances[v] < bound) {
+                            visited.add(v); q.push(v);
+                        }
+                    });
+                }
+                newAlgoState.phase = 'RELAX_AND_UPDATE';
+            } else if (newAlgoState.phase === 'RELAX_AND_UPDATE') {
+                newAlgoState.Ui.forEach(u => {
+                    graph.nodes[u].adj.forEach(edge => {
+                        const v = edge.target;
+                        const newDist = newAlgoState.distances[u] + edge.weight;
+                        if (newDist < newAlgoState.distances[v]) {
+                            newAlgoState.distances[v] = newDist;
+                            newAlgoState.D.enqueue(v, newDist);
+                        }
+                    });
+                });
+                newAlgoState.Ui.forEach(u => {
+                    if (!newAlgoState.completed[u]) {
+                        newAlgoState.completed[u] = true; newAlgoState.completedCount++;
+                    }
+                });
+                newAlgoState.Si.clear(); newAlgoState.Ui.clear();
+                newAlgoState.phase = 'PROCESS_SUBPROBLEMS';
+            }
+        }
+
+        // --- Drawing and UI ---
+        function drawGraph(ctx, state) {
+            if (!ctx || !state) return;
+            const width = ctx.canvas.width / dpr;
+            const height = ctx.canvas.height / dpr;
+            ctx.clearRect(0, 0, width, height);
+
+            graph.edges.forEach(edge => {
+                const source = graph.nodes[edge.source];
+                const target = graph.nodes[edge.target];
+                ctx.beginPath();
+                ctx.moveTo(source.x, source.y);
+                ctx.lineTo(target.x, target.y);
+                let edgeRelaxed = state.completed[edge.source] && state.distances[edge.target].toFixed(5) === (state.distances[edge.source] + edge.weight).toFixed(5);
+                ctx.strokeStyle = edgeRelaxed ? '#10B981' : 'rgba(0, 0, 0, 0.1)';
+                ctx.lineWidth = edgeRelaxed ? 1.5 : 0.5;
+                ctx.stroke();
+            });
+
+            graph.nodes.forEach(node => {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 4, 0, 2 * Math.PI);
+                ctx.fillStyle = getNodeColor(node.id, state);
+                ctx.fill();
+            });
+        }
+
+        function getNodeColor(nodeId, state) {
+            if (state.completed[nodeId]) return '#22C55E'; 
+            if (state.Si && state.Si.has(nodeId)) return '#EC4899'; 
+            if (state.P && state.P.has(nodeId)) return '#3B82F6'; 
+            if (state.W && state.W.has(nodeId)) return '#A855F7'; 
+            if (state.pq && state.pq.elements.some(item => item.element === nodeId)) return '#EAB308'; 
+            if (state.D && state.D.elements.some(item => item.element === nodeId)) return '#EAB308'; 
+            return '#9CA3AF';
+        }
+        
+        function updateInfo() {
+            const dijkstraInfo = document.getElementById('dijkstraInfo');
+            const newAlgoInfo = document.getElementById('newAlgoInfo');
+            if (!dijkstraState || !newAlgoState) return;
+            dijkstraInfo.innerHTML = `<strong>Completed:</strong> ${dijkstraState.completedCount}/${NODE_COUNT}<br><strong>Queue:</strong> ${dijkstraState.pq.size()}`;
+            newAlgoInfo.innerHTML = `<strong>Completed:</strong> ${newAlgoState.completedCount}/${NODE_COUNT}<br><strong>Queue:</strong> ${newAlgoState.D.size()}<br><strong>Pivots:</strong> ${newAlgoState.P.size}`;
+        }
+
+        function redrawAll() {
+            drawGraph(dijkstraCtx, dijkstraState);
+            drawGraph(newAlgoCtx, newAlgoState);
+        }
+
+        // --- Main Loop ---
+        function gameLoop(timestamp) {
+            if (!isRunning) return;
+            const deltaTime = timestamp - lastTime;
+            const interval = 1000 / speed;
+            if (deltaTime > interval) {
+                lastTime = timestamp - (deltaTime % interval);
+                if (!dijkstraState.isDone) stepDijkstra();
+                if (!newAlgoState.isDone) stepNewAlgo();
+                redrawAll();
+                updateInfo();
+                if (dijkstraState.completedCount >= NODE_COUNT) dijkstraState.isDone = true;
+                if (newAlgoState.completedCount >= NODE_COUNT) newAlgoState.isDone = true;
+                if (dijkstraState.isDone && newAlgoState.isDone) {
+                    isRunning = false;
+                    startBtn.textContent = "Restart";
+                }
+            }
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- Setup and Event Listeners ---
+        function setupAndRun() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            
+            requestAnimationFrame(() => {
+                if (!dijkstraCtx) dijkstraCtx = dijkstraCanvas.getContext('2d');
+                if (!newAlgoCtx) newAlgoCtx = newAlgoCanvas.getContext('2d');
+                
+                scaleCanvas(dijkstraCanvas, dijkstraCtx);
+                scaleCanvas(newAlgoCanvas, newAlgoCtx);
+                
+                resetAlgorithms();
+                createGraph(graphTypeSelect.value);
+                
+                redrawAll();
+                updateInfo();
+                
+                isRunning = false;
+                startBtn.textContent = "Start";
+            });
+        }
+
+        startBtn.addEventListener('click', () => {
+             if (dijkstraState.isDone && newAlgoState.isDone) {
+                setupAndRun();
+                return;
+            }
+            if (!isRunning) {
+                isRunning = true;
+                startBtn.textContent = "Pause";
+                lastTime = performance.now();
+                requestAnimationFrame(gameLoop);
+            } else {
+                isRunning = false;
+                startBtn.textContent = "Resume";
+            }
+        });
+
+        graphTypeSelect.addEventListener('change', setupAndRun);
+        speedInput.addEventListener('input', (e) => { speed = parseInt(e.target.value, 10); });
+        
+        // --- Resize Handling ---
+        let resizeTimer;
+        const observer = new ResizeObserver(() => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(setupAndRun, 150);
+        });
+        observer.observe(document.getElementById('vizContainer'));
+        
+        // Initial setup on load
+        window.addEventListener('load', setupAndRun);
+    </script>
+</body>
+</html>
