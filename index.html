@@ -32,7 +32,6 @@
     <div class="w-full max-w-7xl mx-auto p-2 sm:p-4 flex flex-col">
         <!-- Header -->
         <div class="flex-shrink-0 text-center mb-2">
-            <!-- CHANGED: Title updated -->
             <h1 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900">BMSSP vs Dijkstra's</h1>
         </div>
 
@@ -54,9 +53,9 @@
             </div>
             <button id="startBtn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">Start</button>
         </div>
-        
+
         <div class="flex-shrink-0 text-center mb-2 text-xs text-gray-500">
-            <p><span class="font-bold text-green-600">Green:</span> Completed | <span class="font-bold text-yellow-500">Yellow:</span> Frontier/Queue | <span class="font-bold text-blue-600">Blue:</span> Pivot | <span class="font-bold text-purple-500">Purple:</span> Touched (W) | <span class="font-bold text-pink-500">Pink:</span> Sub-frontier (Si)</p>
+            <p><span class="font-bold text-lime-500">Green:</span> Completed | <span class="font-bold text-orange-500">Orange:</span> Frontier/Queue | <span class="font-bold text-blue-600">Blue:</span> Pivot | <span class="font-bold text-purple-500">Purple:</span> Touched (W) | <span class="font-bold text-pink-500">Pink:</span> Sub-frontier (Si)</p>
         </div>
 
         <!-- Visualizations Container -->
@@ -410,12 +409,12 @@
         }
 
         function getNodeColor(nodeId, state) {
-            if (state.completed[nodeId]) return '#22C55E'; 
+            if (state.completed[nodeId]) return '#84CC16'; // lime-500
             if (state.Si && state.Si.has(nodeId)) return '#EC4899'; 
             if (state.P && state.P.has(nodeId)) return '#3B82F6'; 
             if (state.W && state.W.has(nodeId)) return '#A855F7'; 
-            if (state.pq && state.pq.elements.some(item => item.element === nodeId)) return '#EAB308'; 
-            if (state.D && state.D.elements.some(item => item.element === nodeId)) return '#EAB308'; 
+            if (state.pq && state.pq.elements.some(item => item.element === nodeId)) return '#F97316';
+            if (state.D && state.D.elements.some(item => item.element === nodeId)) return '#F97316';
             return '#9CA3AF';
         }
         
