@@ -36,23 +36,28 @@
         </div>
 
         <!-- Controls -->
-        <div class="flex-shrink-0 bg-white rounded-xl shadow-md p-2 sm:p-4 mb-2 flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-sm">
-            <div class="flex items-center gap-2">
-                <label for="graphType" class="font-medium text-gray-700">Graph:</label>
-                <select id="graphType" class="rounded-lg border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500">
-                    <option value="bottleneck">Bottleneck</option>
-                    <option value="grid">Grid</option>
-                    <option value="barbell">Barbell</option>
-                    <option value="caveman" selected>Caveman</option>
-                    <option value="hubAndSpoke">Hub & Spoke</option>
-                </select>
-            </div>
-            <div class="flex items-center gap-2">
-                <label for="speed" class="font-medium text-gray-700">Speed:</label>
-                <input type="range" id="speed" min="1" max="10" value="5" class="w-24">
-            </div>
-            <button id="startBtn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">Start</button>
-        </div>
+		<div class="flex-shrink-0 bg-white rounded-xl shadow-md p-2 sm:p-4 mb-2 flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-sm">
+			<div class="flex items-center gap-2">
+				<label for="graphType" class="font-medium text-gray-700">Graph:</label>
+				<select id="graphType" class="rounded-lg border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+					<option value="bottleneck">Bottleneck</option>
+					<option value="grid">Grid</option>
+					<option value="barbell">Barbell</option>
+					<option value="caveman" selected>Caveman</option>
+					<option value="hubAndSpoke">Hub & Spoke</option>
+				</select>
+			</div>
+			<div class="flex items-center gap-2">
+				<label for="speed" class="font-medium text-gray-700">Speed:</label>
+				<input type="range" id="speed" min="1" max="10" value="5" class="w-24">
+			</div>
+			<div class="flex items-center gap-2">
+				<label for="edgeDensity" class="font-medium text-gray-700">m (density):</label>
+				<input type="range" id="edgeDensity" min="0" max="1" step="0.05" value="0.5" class="w-24">
+				<span id="edgeDensityLabel" class="text-gray-500">0.50</span>
+			</div>
+			<button id="startBtn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">Start</button>
+		</div>
 
         <div class="flex-shrink-0 text-center mb-2 text-xs text-gray-500">
             <p><span class="font-bold text-lime-500">Green:</span> Completed | <span class="font-bold text-orange-500">Orange:</span> Frontier/Queue | <span class="font-bold text-blue-600">Blue:</span> Pivot | <span class="font-bold text-purple-500">Purple:</span> Touched (W) | <span class="font-bold text-pink-500">Pink:</span> Sub-frontier (Si)</p>
@@ -95,20 +100,23 @@
 
     <script>
         // --- DOM Elements ---
-        const dijkstraCanvas = document.getElementById('dijkstraCanvas');
-        const newAlgoCanvas = document.getElementById('newAlgoCanvas');
-        const startBtn = document.getElementById('startBtn');
-        const graphTypeSelect = document.getElementById('graphType');
-        const speedInput = document.getElementById('speed');
+		const dijkstraCanvas = document.getElementById('dijkstraCanvas');
+		const newAlgoCanvas = document.getElementById('newAlgoCanvas');
+		const startBtn = document.getElementById('startBtn');
+		const graphTypeSelect = document.getElementById('graphType');
+		const speedInput = document.getElementById('speed');
+		const edgeDensityInput = document.getElementById('edgeDensity');
+		const edgeDensityLabel = document.getElementById('edgeDensityLabel');
 
         // --- Global State ---
-        const dpr = window.devicePixelRatio || 1;
-        let dijkstraCtx, newAlgoCtx;
-        const NODE_COUNT = 75;
-        let graph = { nodes: [], edges: [] };
-        let dijkstraState, newAlgoState;
-        let animationFrameId;
-        let isRunning = false, lastTime = 0, speed = 5;
+		const dpr = window.devicePixelRatio || 1;
+		let dijkstraCtx, newAlgoCtx;
+		const NODE_COUNT = 75;
+		let graph = { nodes: [], edges: [] };
+		let dijkstraState, newAlgoState;
+		let animationFrameId;
+		let isRunning = false, lastTime = 0, speed = 5;
+		let edgeDensity = 0.5;
 
         // --- Canvas Setup ---
         function scaleCanvas(canvas, ctx) {
@@ -150,28 +158,28 @@
                     graph.nodes[i].x = padding + c * (canvasWidth - 2 * padding) / (grid_cols - 1);
                     graph.nodes[i].y = padding + r * (canvasHeight - 2 * padding) / (grid_rows - 1);
                 }
-                 for (let i = 0; i < NODE_COUNT; i++) {
-                    const r = Math.floor(i / grid_cols);
-                    const c = i % grid_cols;
-                    if (r >= grid_rows) continue;
-                    if (c < grid_cols - 1 && (i+1 < NODE_COUNT)) addEdge(i, i + 1);
-                    if (r < grid_rows - 1 && (i+grid_cols < NODE_COUNT)) addEdge(i, i + grid_cols);
-                 }
-            } else if (type === 'bottleneck') {
-                 const bottleneckNode = 1;
-                graph.nodes[bottleneckNode].x = canvasWidth / 2;
-                graph.nodes[bottleneckNode].y = canvasHeight / 2;
-                addEdge(0, bottleneckNode, 5);
-                for(let i = 2; i < NODE_COUNT; i++) {
-                    graph.nodes[i].x = padding + Math.random() * (canvasWidth - 2 * padding);
-                    graph.nodes[i].y = padding + Math.random() * (canvasHeight - 2 * padding);
-                    if (Math.random() > 0.5) {
-                        addEdge(bottleneckNode, i, 10 + Math.random() * 20);
-                    } else {
-                        const otherNode = Math.floor(2 + Math.random() * (NODE_COUNT-2));
-                        if(i !== otherNode) addEdge(i, otherNode, 1 + Math.random() * 5);
-                    }
-                }
+                for (let i = 0; i < NODE_COUNT; i++) {
+					const r = Math.floor(i / grid_cols);
+					const c = i % grid_cols;
+					if (r >= grid_rows) continue;
+					if (c < grid_cols - 1 && (i+1 < NODE_COUNT) && Math.random() < edgeDensity) addEdge(i, i + 1);
+					if (r < grid_rows - 1 && (i+grid_cols < NODE_COUNT) && Math.random() < edgeDensity) addEdge(i, i + grid_cols);
+				 }
+			} else if (type === 'bottleneck') {
+				 const bottleneckNode = 1;
+				graph.nodes[bottleneckNode].x = canvasWidth / 2;
+				graph.nodes[bottleneckNode].y = canvasHeight / 2;
+				addEdge(0, bottleneckNode, 5);
+				for(let i = 2; i < NODE_COUNT; i++) {
+					graph.nodes[i].x = padding + Math.random() * (canvasWidth - 2 * padding);
+					graph.nodes[i].y = padding + Math.random() * (canvasHeight - 2 * padding);
+					if (Math.random() < edgeDensity) {
+						addEdge(bottleneckNode, i, 10 + Math.random() * 20);
+					} else if (Math.random() < edgeDensity) {
+						const otherNode = Math.floor(2 + Math.random() * (NODE_COUNT-2));
+						if(i !== otherNode) addEdge(i, otherNode, 1 + Math.random() * 5);
+					}
+				}
             } else if (type === 'barbell') {
                 const half = Math.floor(NODE_COUNT / 2);
                 for (let i = 1; i < half; i++) {
@@ -179,19 +187,19 @@
                     graph.nodes[i].y = canvasHeight / 2 + (Math.random() - 0.5) * canvasHeight * 0.8;
                 }
                 for (let i = 0; i < half; i++) {
-                    for (let j = i + 1; j < half; j++) {
-                        if(Math.random() > 0.5) addEdge(i, j);
-                    }
-                }
+					for (let j = i + 1; j < half; j++) {
+						if(Math.random() < edgeDensity) addEdge(i, j);
+					}
+				}
                 for (let i = half; i < NODE_COUNT; i++) {
                     graph.nodes[i].x = canvasWidth * 0.75 + (Math.random() - 0.5) * canvasWidth * 0.2;
                     graph.nodes[i].y = canvasHeight / 2 + (Math.random() - 0.5) * canvasHeight * 0.8;
                 }
                 for (let i = half; i < NODE_COUNT; i++) {
-                    for (let j = i + 1; j < NODE_COUNT; j++) {
-                        if(Math.random() > 0.5) addEdge(i, j);
-                    }
-                }
+					for (let j = i + 1; j < NODE_COUNT; j++) {
+						if(Math.random() < edgeDensity) addEdge(i, j);
+					}
+				}
                 addEdge(1, half);
             } else if (type === 'caveman') {
                 const numCaves = 5;
@@ -205,16 +213,16 @@
                     caveGuards.push(startNode);
 
                     for (let i = startNode; i < endNode; i++) {
-                        graph.nodes[i].x = centerX + (Math.random() - 0.5) * canvasWidth * 0.15;
-                        graph.nodes[i].y = centerY + (Math.random() - 0.5) * canvasHeight * 0.15;
-                        for (let j = i + 1; j < endNode; j++) {
-                            addEdge(i, j);
-                        }
-                    }
-                }
-                for (let i = 0; i < caveGuards.length; i++) {
-                    addEdge(caveGuards[i], caveGuards[(i + 1) % caveGuards.length]);
-                }
+						graph.nodes[i].x = centerX + (Math.random() - 0.5) * canvasWidth * 0.15;
+						graph.nodes[i].y = centerY + (Math.random() - 0.5) * canvasHeight * 0.15;
+						for (let j = i + 1; j < endNode; j++) {
+							if (Math.random() < edgeDensity) addEdge(i, j);
+						}
+					}
+				}
+				for (let i = 0; i < caveGuards.length; i++) {
+					addEdge(caveGuards[i], caveGuards[(i + 1) % caveGuards.length]);
+				}
             } else if (type === 'hubAndSpoke') {
                 const hubNode = 1;
                 graph.nodes[hubNode].x = canvasWidth / 2;
@@ -227,11 +235,11 @@
                     const radius = Math.min(canvasWidth, canvasHeight) * 0.4;
                     const nodeIdx = i + 2;
                     graph.nodes[nodeIdx].x = canvasWidth / 2 + radius * Math.cos(angle);
-                    graph.nodes[nodeIdx].y = canvasHeight / 2 + radius * Math.sin(angle);
-                    addEdge(hubNode, nodeIdx);
-                    if (i > 0) addEdge(nodeIdx, nodeIdx - 1);
-                }
-                 if(numSpokes > 1) addEdge(2, numSpokes + 1);
+					graph.nodes[nodeIdx].y = canvasHeight / 2 + radius * Math.sin(angle);
+					addEdge(hubNode, nodeIdx);
+					if (i > 0 && Math.random() < edgeDensity) addEdge(nodeIdx, nodeIdx - 1);
+				}
+				 if(numSpokes > 1 && Math.random() < edgeDensity) addEdge(2, numSpokes + 1);
             }
 
             graph.nodes.forEach(node => {
@@ -467,21 +475,23 @@
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             
             requestAnimationFrame(() => {
-                if (!dijkstraCtx) dijkstraCtx = dijkstraCanvas.getContext('2d');
-                if (!newAlgoCtx) newAlgoCtx = newAlgoCanvas.getContext('2d');
-                
-                scaleCanvas(dijkstraCanvas, dijkstraCtx);
-                scaleCanvas(newAlgoCanvas, newAlgoCtx);
-                
-                resetAlgorithms();
-                createGraph(graphTypeSelect.value);
-                
-                redrawAll();
-                updateInfo();
-                
-                isRunning = false;
-                startBtn.textContent = "Start";
-            });
+				if (!dijkstraCtx) dijkstraCtx = dijkstraCanvas.getContext('2d');
+				if (!newAlgoCtx) newAlgoCtx = newAlgoCanvas.getContext('2d');
+				
+				scaleCanvas(dijkstraCanvas, dijkstraCtx);
+				scaleCanvas(newAlgoCanvas, newAlgoCtx);
+				
+				resetAlgorithms();
+				createGraph(graphTypeSelect.value);
+				
+				edgeDensityLabel.textContent = parseFloat(edgeDensityInput.value).toFixed(2);
+				
+				redrawAll();
+				updateInfo();
+				
+				isRunning = false;
+				startBtn.textContent = "Start";
+			});
         }
 
         startBtn.addEventListener('click', () => {
@@ -501,18 +511,23 @@
         });
 
         graphTypeSelect.addEventListener('change', setupAndRun);
-        speedInput.addEventListener('input', (e) => { speed = parseInt(e.target.value, 10); });
-        
-        // --- Resize Handling ---
-        let resizeTimer;
-        const observer = new ResizeObserver(() => {
-            clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(setupAndRun, 150);
-        });
-        observer.observe(document.getElementById('vizContainer'));
-        
-        // Initial setup on load
-        window.addEventListener('load', setupAndRun);
+		speedInput.addEventListener('input', (e) => { speed = parseInt(e.target.value, 10); });
+		edgeDensityInput.addEventListener('input', (e) => {
+			edgeDensity = parseFloat(e.target.value);
+			edgeDensityLabel.textContent = edgeDensity.toFixed(2);
+			setupAndRun();
+		});
+		
+		// --- Resize Handling ---
+		let resizeTimer;
+		const observer = new ResizeObserver(() => {
+			clearTimeout(resizeTimer);
+			resizeTimer = setTimeout(setupAndRun, 150);
+		});
+		observer.observe(document.getElementById('vizContainer'));
+		
+		// Initial setup on load
+		window.addEventListener('load', setupAndRun);
     </script>
 </body>
 </html>
